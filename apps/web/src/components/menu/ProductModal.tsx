@@ -1,17 +1,17 @@
 'use client'
-import { useState, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useEffect, useRef, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { ImagePlus, X } from 'lucide-react'
+import Image from 'next/image'
+import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
 import { Input, Textarea } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
-import { ImagePlus, X } from 'lucide-react'
-import Image from 'next/image'
-
-type Category = { id: string; name: string }
-type Product  = {
-  id: string; name: string; description: string | null; price: number;
-  image_url: string | null; is_available: boolean; category_id: string | null; sort_order: number
-}
+import { createClient } from '@/lib/supabase/client'
+import { useUpsertProduct } from '@/hooks/use-menu'
+import { productSchema, type ProductInput } from '@/lib/validations'
+import type { Category, Product } from '@/lib/types'
 
 type Props = {
   isOpen: boolean
@@ -19,32 +19,31 @@ type Props = {
   restaurantId: string
   categories: Category[]
   editing?: Product | null
-  onSaved: (p: Product) => void
 }
 
-export function ProductModal({ isOpen, onClose, restaurantId, categories, editing, onSaved }: Props) {
-  const [name, setName]               = useState(editing?.name ?? '')
-  const [description, setDescription] = useState(editing?.description ?? '')
-  const [price, setPrice]             = useState(editing?.price?.toString() ?? '')
-  const [categoryId, setCategoryId]   = useState(editing?.category_id ?? '')
-  const [imageUrl, setImageUrl]       = useState<string | null>(editing?.image_url ?? null)
-  const [imageFile, setImageFile]     = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(editing?.image_url ?? null)
-  const [error, setError]             = useState('')
-  const [saving, setSaving]           = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
+export function ProductModal({ isOpen, onClose, restaurantId, categories, editing }: Props) {
+  const upsert   = useUpsertProduct(restaurantId)
+  const fileRef  = useRef<HTMLInputElement>(null)
+  const [imageFile,    setImageFile]    = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [uploading,    setUploading]    = useState(false)
 
-  const handleClose = () => {
-    setName(editing?.name ?? '')
-    setDescription(editing?.description ?? '')
-    setPrice(editing?.price?.toString() ?? '')
-    setCategoryId(editing?.category_id ?? '')
-    setImageUrl(editing?.image_url ?? null)
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<ProductInput>({
+    resolver: zodResolver(productSchema),
+    defaultValues: { name: '', description: '', price: 0, category_id: null, is_available: true },
+  })
+
+  useEffect(() => {
+    reset({
+      name:         editing?.name          ?? '',
+      description:  editing?.description   ?? '',
+      price:        editing?.price         ?? 0,
+      category_id:  editing?.category_id   ?? null,
+      is_available: editing?.is_available  ?? true,
+    })
     setImageFile(null)
     setImagePreview(editing?.image_url ?? null)
-    setError('')
-    onClose()
-  }
+  }, [editing, isOpen, reset])
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -63,74 +62,63 @@ export function ProductModal({ isOpen, onClose, restaurantId, categories, editin
     return data.publicUrl
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim() || !price) return
-    setError('')
-    setSaving(true)
+  const handleClose = () => {
+    reset()
+    setImageFile(null)
+    setImagePreview(null)
+    onClose()
+  }
+
+  const onSubmit = async (data: ProductInput) => {
     try {
-      const supabase = createClient()
-      let finalImageUrl = imageUrl
-
+      let image_url = editing?.image_url ?? null
       if (imageFile) {
-        finalImageUrl = await uploadImage(imageFile)
+        setUploading(true)
+        image_url = await uploadImage(imageFile)
+        setUploading(false)
+      } else if (imagePreview === null) {
+        image_url = null
       }
-
-      const payload = {
-        name:        name.trim(),
-        description: description.trim() || null,
-        price:       parseFloat(price),
-        category_id: categoryId || null,
-        image_url:   finalImageUrl,
-      }
-
-      if (editing) {
-        const { data, error: err } = await supabase
-          .from('products')
-          .update(payload)
-          .eq('id', editing.id)
-          .select()
-          .single()
-        if (err) throw err
-        onSaved(data as Product)
-      } else {
-        const { data, error: err } = await supabase
-          .from('products')
-          .insert({ ...payload, restaurant_id: restaurantId })
-          .select()
-          .single()
-        if (err) throw err
-        onSaved(data as Product)
-      }
+      await upsert.mutateAsync({
+        ...(editing ? { id: editing.id } : {}),
+        name:         data.name,
+        description:  data.description ?? null,
+        price:        data.price,
+        category_id:  data.category_id || null,
+        image_url,
+        is_available: editing?.is_available ?? true,
+      })
+      toast.success(editing ? 'Producto actualizado' : 'Producto creado')
       handleClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar')
-    } finally {
-      setSaving(false)
+    } catch {
+      setUploading(false)
+      toast.error('Error al guardar el producto')
     }
   }
 
+  const loading = isSubmitting || uploading
+
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={editing ? 'Editar producto' : 'Nuevo producto'} size="lg">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
             <Input
               label="Nombre del producto"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
               placeholder="Ej. Hamburguesa Clásica"
               required
+              error={errors.name?.message}
+              {...register('name')}
             />
           </div>
 
           <div className="col-span-2">
             <Textarea
               label="Descripción (opcional)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
               placeholder="Ingredientes, información adicional…"
               rows={2}
+              error={errors.description?.message}
+              {...register('description')}
             />
           </div>
 
@@ -139,21 +127,20 @@ export function ProductModal({ isOpen, onClose, restaurantId, categories, editin
             type="number"
             min="0"
             step="0.01"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
             placeholder="0.00"
             required
+            error={errors.price?.message}
+            {...register('price')}
           />
 
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">Categoría</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Categoría</label>
             <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              {...register('category_id')}
+              className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring text-foreground"
             >
               <option value="">Sin categoría</option>
-              {categories.map((c) => (
+              {categories.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
@@ -162,23 +149,23 @@ export function ProductModal({ isOpen, onClose, restaurantId, categories, editin
 
         {/* Image upload */}
         <div>
-          <p className="text-sm font-medium text-gray-700 mb-2">Foto del producto</p>
+          <p className="text-sm font-medium text-foreground mb-2">Foto del producto</p>
           {imagePreview ? (
-            <div className="relative w-32 h-32 rounded-xl overflow-hidden border border-gray-200 group">
+            <div className="relative w-32 h-32 rounded-xl overflow-hidden border border-border group">
               <Image src={imagePreview} alt="Preview" fill className="object-cover" />
               <button
                 type="button"
-                onClick={() => { setImagePreview(null); setImageFile(null); setImageUrl(null) }}
-                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => { setImagePreview(null); setImageFile(null) }}
+                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-background/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
               >
-                <X size={12} className="text-gray-600" />
+                <X size={12} className="text-foreground" />
               </button>
             </div>
           ) : (
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="flex flex-col items-center justify-center w-32 h-32 rounded-xl border-2 border-dashed border-gray-300 hover:border-orange-400 hover:bg-orange-50 transition-colors text-gray-400 hover:text-orange-500"
+              className="flex flex-col items-center justify-center w-32 h-32 rounded-xl border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors text-muted-foreground hover:text-primary"
             >
               <ImagePlus size={22} />
               <span className="text-xs mt-1">Subir foto</span>
@@ -193,13 +180,11 @@ export function ProductModal({ isOpen, onClose, restaurantId, categories, editin
           />
         </div>
 
-        {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-
         <div className="flex gap-3 pt-1">
-          <Button type="button" variant="secondary" className="flex-1" onClick={handleClose}>
+          <Button type="button" variant="outline" className="flex-1" onClick={handleClose} disabled={loading}>
             Cancelar
           </Button>
-          <Button type="submit" className="flex-1" isLoading={saving}>
+          <Button type="submit" className="flex-1" loading={loading}>
             {editing ? 'Guardar cambios' : 'Crear producto'}
           </Button>
         </div>

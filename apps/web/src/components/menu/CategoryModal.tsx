@@ -1,90 +1,75 @@
 'use client'
-import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useEffect } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
 import { Input, Textarea } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
-
-type Category = { id: string; name: string; description: string | null; sort_order: number; is_active: boolean }
+import { useUpsertCategory } from '@/hooks/use-menu'
+import { categorySchema, type CategoryInput } from '@/lib/validations'
+import type { Category } from '@/lib/types'
 
 type Props = {
   isOpen: boolean
   onClose: () => void
   restaurantId: string
   editing?: Category | null
-  onSaved: (cat: Category) => void
 }
 
-export function CategoryModal({ isOpen, onClose, restaurantId, editing, onSaved }: Props) {
-  const [name, setName]               = useState(editing?.name ?? '')
-  const [description, setDescription] = useState(editing?.description ?? '')
-  const [error, setError]             = useState('')
-  const [saving, setSaving]           = useState(false)
+export function CategoryModal({ isOpen, onClose, restaurantId, editing }: Props) {
+  const upsert = useUpsertCategory(restaurantId)
 
-  // Reset on open/close
-  const handleClose = () => {
-    setName(editing?.name ?? '')
-    setDescription(editing?.description ?? '')
-    setError('')
-    onClose()
-  }
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<CategoryInput>({
+    resolver: zodResolver(categorySchema),
+    defaultValues: { name: '', description: '', is_active: true },
+  })
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) return
-    setError('')
-    setSaving(true)
+  useEffect(() => {
+    reset({
+      name:        editing?.name        ?? '',
+      description: editing?.description ?? '',
+      is_active:   editing?.is_active   ?? true,
+    })
+  }, [editing, isOpen, reset])
+
+  const onSubmit = async (data: CategoryInput) => {
     try {
-      const supabase = createClient()
-      if (editing) {
-        const { data, error: err } = await supabase
-          .from('categories')
-          .update({ name: name.trim(), description: description.trim() || null })
-          .eq('id', editing.id)
-          .select()
-          .single()
-        if (err) throw err
-        onSaved(data as Category)
-      } else {
-        const { data, error: err } = await supabase
-          .from('categories')
-          .insert({ restaurant_id: restaurantId, name: name.trim(), description: description.trim() || null })
-          .select()
-          .single()
-        if (err) throw err
-        onSaved(data as Category)
-      }
-      handleClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar')
-    } finally {
-      setSaving(false)
+      await upsert.mutateAsync({
+        ...(editing ? { id: editing.id } : {}),
+        name:        data.name,
+        description: data.description ?? null,
+        is_active:   editing?.is_active ?? true,
+      })
+      toast.success(editing ? 'Categoría actualizada' : 'Categoría creada')
+      onClose()
+    } catch {
+      toast.error('Error al guardar la categoría')
     }
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title={editing ? 'Editar categoría' : 'Nueva categoría'} size="sm">
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <Modal isOpen={isOpen} onClose={onClose} title={editing ? 'Editar categoría' : 'Nueva categoría'} size="sm">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Input
           label="Nombre"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
           placeholder="Ej. Hamburguesas"
           required
+          error={errors.name?.message}
+          {...register('name')}
         />
         <Textarea
           label="Descripción (opcional)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
           placeholder="Breve descripción de la categoría"
           rows={2}
+          error={errors.description?.message}
+          {...register('description')}
         />
-        {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
         <div className="flex gap-3 pt-1">
-          <Button type="button" variant="secondary" className="flex-1" onClick={handleClose}>
+          <Button type="button" variant="outline" className="flex-1" onClick={onClose} disabled={isSubmitting}>
             Cancelar
           </Button>
-          <Button type="submit" className="flex-1" isLoading={saving}>
+          <Button type="submit" className="flex-1" loading={isSubmitting}>
             {editing ? 'Guardar cambios' : 'Crear categoría'}
           </Button>
         </div>

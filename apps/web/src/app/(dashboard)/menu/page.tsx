@@ -1,26 +1,26 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import { getMyRestaurant, getCategories, getProducts } from '@/lib/supabase/queries'
+'use client'
 import { MenuManager } from '@/components/menu/MenuManager'
+import { useRestaurant } from '@/hooks/use-restaurant'
+import { Skeleton } from '@/components/ui/skeleton'
 
-export default async function MenuPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+export default function MenuPage() {
+  const { data: restaurant, isLoading } = useRestaurant()
 
-  const restaurant = await getMyRestaurant()
-  if (!restaurant) redirect('/dashboard')
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <div className="flex gap-5">
+          <Skeleton className="h-64 w-44 rounded-xl shrink-0" />
+          <div className="flex-1 grid grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-60 rounded-xl" />)}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
-  const [categories, products] = await Promise.all([
-    getCategories(restaurant.id),
-    getProducts(restaurant.id),
-  ])
+  if (!restaurant) return null
 
-  return (
-    <MenuManager
-      restaurantId={restaurant.id}
-      initialCategories={categories}
-      initialProducts={products}
-    />
-  )
+  return <MenuManager restaurantId={restaurant.id} />
 }

@@ -1,77 +1,93 @@
+import * as React from 'react'
 import { cn } from '@/lib/utils'
-import { forwardRef } from 'react'
 
-type InputProps = {
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string
   error?: string
   hint?: string
-} & React.InputHTMLAttributes<HTMLInputElement>
+  leftElement?: React.ReactNode
+  rightElement?: React.ReactNode
+}
 
-const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, hint, className, id, ...props }, ref) => {
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, label, error, hint, leftElement, rightElement, id, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
     return (
-      <div className="flex flex-col gap-1">
+      <div className="space-y-1.5">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-gray-700">
-            {label}{props.required && <span className="text-red-500 ml-0.5">*</span>}
+          <label htmlFor={inputId} className="text-sm font-medium text-foreground">
+            {label}
+            {props.required && <span className="text-destructive ml-0.5">*</span>}
           </label>
         )}
-        <input
-          ref={ref}
-          id={inputId}
-          className={cn(
-            'w-full rounded-xl border border-gray-300 px-3 py-2 text-sm bg-white',
-            'focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent',
-            'placeholder:text-gray-400 disabled:bg-gray-50 disabled:text-gray-500',
-            error && 'border-red-400 focus:ring-red-500',
-            className,
+        <div className="relative flex items-center">
+          {leftElement && (
+            <div className="pointer-events-none absolute left-3 flex items-center text-muted-foreground">
+              {leftElement}
+            </div>
           )}
-          {...props}
-        />
-        {hint && !error && <p className="text-xs text-gray-500">{hint}</p>}
-        {error && <p className="text-xs text-red-600">{error}</p>}
+          <input
+            id={inputId}
+            ref={ref}
+            className={cn(
+              'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-sm',
+              'transition-colors placeholder:text-muted-foreground',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              leftElement  && 'pl-9',
+              rightElement && 'pr-9',
+              error && 'border-destructive focus-visible:ring-destructive',
+              className,
+            )}
+            {...props}
+          />
+          {rightElement && (
+            <div className="absolute right-3 flex items-center text-muted-foreground">
+              {rightElement}
+            </div>
+          )}
+        </div>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
       </div>
     )
-  },
+  }
 )
 Input.displayName = 'Input'
 
-type TextareaProps = {
+interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string
   error?: string
   hint?: string
-} & React.TextareaHTMLAttributes<HTMLTextAreaElement>
+}
 
-const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ label, error, hint, className, id, rows = 3, ...props }, ref) => {
+export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ className, label, error, hint, id, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
     return (
-      <div className="flex flex-col gap-1">
+      <div className="space-y-1.5">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-gray-700">
+          <label htmlFor={inputId} className="text-sm font-medium text-foreground">
             {label}
           </label>
         )}
         <textarea
-          ref={ref}
           id={inputId}
-          rows={rows}
+          ref={ref}
           className={cn(
-            'w-full rounded-xl border border-gray-300 px-3 py-2 text-sm bg-white resize-none',
-            'focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent',
-            'placeholder:text-gray-400',
-            error && 'border-red-400 focus:ring-red-500',
+            'flex min-h-[80px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm',
+            'transition-colors placeholder:text-muted-foreground resize-none',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            error && 'border-destructive',
             className,
           )}
           {...props}
         />
-        {hint && !error && <p className="text-xs text-gray-500">{hint}</p>}
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
       </div>
     )
-  },
+  }
 )
 Textarea.displayName = 'Textarea'
-
-export { Input, Textarea }
