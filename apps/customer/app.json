@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Delivery Customer",
+    "slug": "customer-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.delivery.customer"
+    },
+    "android": {
+      "package": "com.delivery.customer"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Necesitamos tu ubicación para mostrarte restaurantes cercanos y calcular el costo de entrega."
+        }
+      ]
+    ],
+    "scheme": "customer-app",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

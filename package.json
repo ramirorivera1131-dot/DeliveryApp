@@ -9,6 +9,7 @@
   "scripts": {
     "dev:web": "npm run dev -w @delivery/web",
     "dev:mobile": "npm run start -w @delivery/mobile",
+    "dev:customer": "npm run start -w @delivery/customer",
     "build:web": "npm run build -w @delivery/web",
     "db:push": "supabase db push",
     "db:reset": "supabase db reset",
